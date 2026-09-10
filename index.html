@@ -173,26 +173,36 @@ function init() {
   window.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // 入力処理を一箇所にまとめる
-  function processInputStart(canvasX, canvasY) {
-    if (gameState === 'TITLE') {
-      gameState = 'STORY';
-    } else if (gameState === 'STORY') {
-      resetGame();
-      gameState = 'PLAYING';
-    } else if (gameState === 'STAGE_CLEAR' && endCardTimer >= END_CARD_DELAY) {
-      gameState = 'TITLE';
-    } else if (gameState === 'PLAYING') {
-      if (canvasX > 760 && canvasY > 280) {
-        handleAction(); // 🦘 JUMPボタン
-      } else if (canvasY < canvas.height / 2) {
-        moveLane(-1); // ▲上（画面上半分タップ）
-      } else {
-        moveLane(1);  // ▼下（画面下半分タップ）
-      }
-    } else if (gameState === 'GAMEOVER') {
-      gameState = 'TITLE';
+ function processInputStart(canvasX, canvasY) {
+
+    // ▲上ボタン判定（左側の上ボタン）
+    if (canvasX >= 15 && canvasX <= 125 &&
+        canvasY >= 280 && canvasY <= 350) {
+        moveLane(-1);
+        return;
     }
-  }
+
+    // ▼下ボタン判定（左側の下ボタン）
+    if (canvasX >= 15 && canvasX <= 125 &&
+        canvasY >= 360 && canvasY <= 430) {
+        moveLane(1);
+        return;
+    }
+
+    // 🦘 JUMPボタン判定（右側のジャンプ）
+    if (canvasX >= 800 && canvasX <= 920 &&
+        canvasY >= 310 && canvasY <= 430) {
+        handleAction();
+        return;
+    }
+
+    // それ以外は画面半分タップで操作
+    if (canvasY < canvas.height / 2) {
+        moveLane(-1);
+    } else {
+        moveLane(1);
+    }
+}
 
   // 📱 スマホ用タッチイベントを追加 (touchstart)
   container.addEventListener('touchstart', (e) => {
