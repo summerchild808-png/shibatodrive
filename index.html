@@ -258,14 +258,7 @@ function init() {
       gameState = 'PLAYING';
     } else if (gameState === 'STAGE_CLEAR' && endCardTimer >= END_CARD_DELAY) {
       saveGame();
-      if (currentStage === 1) {
-        gameState = 'SELECT_ROUTE';
-      } else if (currentStage === 2) {
-        resetStage(3);
-        gameState = 'PLAYING';
-      } else if (currentStage === 3 || currentStage === 99) {
-        gameState = 'SELECT_ROUTE';
-      }
+      gameState = 'SELECT_ROUTE';
     } else if (gameState === 'SELECT_ROUTE') {
       if (buttonNum === 2) {
         selectShitadaRoute();
@@ -397,8 +390,16 @@ function moveLane(dir) {
   }
 }
 
+// 修正：次のステージへ正しく進む分岐ロジック
 function selectShitadaRoute() {
-  let nextStage = (currentStage === 1) ? 2 : 1;
+  let nextStage = 1;
+  if (currentStage === 1) {
+    nextStage = 2; // 福岡クリア後は広島へ
+  } else if (currentStage === 2) {
+    nextStage = 3; // 広島クリア後は大阪・名古屋へ
+  } else if (currentStage === 3 || currentStage === 99) {
+    nextStage = 1; // 大阪・名古屋または高速クリア後は最初（福岡）へ循環
+  }
   resetStage(nextStage);
   gameState = 'PLAYING';
 }
@@ -506,7 +507,6 @@ function updateStageLogic() {
   skyX = (skyX - gameSpeed * 0.15) % canvas.width;
   townX = (townX - gameSpeed * 0.5) % canvas.width;
 
-  // 怪獣の出現タイミングを「昼間（序盤）」へ変更
   if (currentStage === 1) { // 福岡
     if (currentDistance >= 5.5) nightAlpha = Math.min(1, nightAlpha + 0.008);
     if (currentDistance >= 1.5 && !towerPassed) {
@@ -520,14 +520,14 @@ function updateStageLogic() {
     } else if (currentDistance >= 7.0 && bgMonsterX > -300) {
       bgMonsterX -= gameSpeed * 0.8;
     }
-  } else if (currentStage === 2) { // 広島（昼間の1.5〜5.0で出現）
+  } else if (currentStage === 2) { // 広島
     if (currentDistance >= 1.5 && currentDistance < 5.0) {
       if (bgMonsterX === -300) bgMonsterX = canvas.width;
       bgMonsterX -= gameSpeed * 0.35;
     } else if (currentDistance >= 5.0 && bgMonsterX > -300) {
       bgMonsterX -= gameSpeed * 0.8;
     }
-  } else if (currentStage === 3) { // 大阪・名古屋（昼間の1.5〜5.5で出現）
+  } else if (currentStage === 3) { // 大阪・名古屋
     if (currentDistance >= 1.5 && currentDistance < 5.5) {
       if (bgMonsterX === -300) bgMonsterX = canvas.width;
       bgMonsterX -= gameSpeed * 0.35;
@@ -570,7 +570,6 @@ function updateHighway() {
     patrolCarX -= 2.0;
   }
 
-  // 🚨 パトカー判定修正: ハート減算なし！ 罰金（-¥3,000）のみペナルティ
   if (patrolCarX > 20 && Math.abs(player.x - patrolCarX) < 80) {
     scoreMoney = Math.max(0, scoreMoney - 3000);
     addPopup('無免許御用！ 罰金 -¥3,000', '#FF0000', player.x, player.y - 20);
@@ -797,7 +796,6 @@ function draw() {
     safeDraw(hwBg, skyX + canvas.width, 0, canvas.width, 370);
 
   } else {
-    // 🌌 全ステージで「夜空レイヤー」を透過背景として最背面に描画
     safeDraw(images.bgNightSky, skyX, 0, canvas.width, canvas.height);
     safeDraw(images.bgNightSky, skyX + canvas.width, 0, canvas.width, canvas.height);
 
@@ -1066,7 +1064,7 @@ function draw() {
     ctx.textAlign = 'center';
     ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
     
-    let stageTitle = '🎉 下道ステージ クリア！';
+    let stageTitle = '🎉 福岡ステージ クリア！';
     if (currentStage === 2) stageTitle = '🎉 広島ステージ クリア！';
     else if (currentStage === 3) stageTitle = '🎉 大阪・名古屋ステージ クリア！';
     else if (currentStage === 99) stageTitle = '🎉 山陽自動車道 ステージクリア！';
