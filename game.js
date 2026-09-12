@@ -128,7 +128,7 @@ let orbisWarningTimer = 0;
 
 let roadDashOffset = 0;
 
-// 🛣️ 車線位置の調整（奥と手前の高さを広げて白線越しに大きく動くように変更）
+// 🛣️ 車線位置の調整（奥車線 0: 330 でしっかり持ち上げ）
 const LANES = { 0: 330, 1: 395 };
 
 // --- プレイヤー ---
@@ -179,9 +179,7 @@ function init() {
 
   window.addEventListener('contextmenu', e => e.preventDefault());
 
-  // --- 入力処理（タッチ・マウス・キーボード） ---
   function processInputStart(canvasX, canvasY, buttonNum = 0) {
-    // ⏸️ ポーズボタン
     if ((gameState === 'PLAYING' || gameState === 'PLAYING_HIGHWAY') &&
         canvasX >= 740 && canvasX <= 810 &&
         canvasY >= 5 && canvasY <= 65) {
@@ -234,19 +232,17 @@ function init() {
       return;
     }
 
-    // --- 下道ステージの操作判定 ---
     if (gameState === 'PLAYING') {
       if (canvasX > 740 && canvasY > 260) {
-        handleAction(); // 🦘 JUMP
+        handleAction();
       } else if (canvasX <= 160 && canvasY >= 260 && canvasY < 355) {
-        moveLane(-1); // ▲ 上ボタン
+        moveLane(-1);
       } else if (canvasX <= 160 && canvasY >= 355) {
-        moveLane(1);  // ▼ 下ボタン
+        moveLane(1);
       }
       return;
     }
 
-    // --- 高速道路ステージの操作判定 ---
     if (gameState === 'PLAYING_HIGHWAY') {
       if (showHighwayTutorial) {
         if (canvasX >= 300 && canvasX <= 660 &&
@@ -618,7 +614,6 @@ function updatePlayerAndObjects() {
       else if (rand < 0.92) selectedType = 'manhole';
       else selectedType = 'monster_block';
 
-      // 📍 障害物・キャラクターのY座標配置調整
       const objData = { type: selectedType, lane: spawnLane, x: canvas.width, y: LANES[spawnLane], width: 40, height: 55 };
 
       if (selectedType === 'truck') { objData.y = LANES[spawnLane] - 10; objData.width = 120; objData.height = 60; }
@@ -683,7 +678,7 @@ function updatePlayerAndObjects() {
 }
 // ===============================
 //  忠犬しばとのお迎え大作戦（横画面・PNG統一版）
-//  game.js  Part 2 (後半：描画処理)
+//  game.js  Part 2 (後半：背景画像そのまま描画・シンプル版)
 // ===============================
 
 function draw() {
@@ -699,9 +694,9 @@ function draw() {
     }
   }
 
-  // 🏙️ 背景タウンの表示高さ調整
+  // 🏙️ 背景タウンの表示高さ調整（画面上部 Y:0 〜 道路の上端 Y:350 をぴったり覆う）
   const townHeight = 350;
-  const townY = canvas.height - townHeight - 30;
+  const townY = 0;
 
   // ===============================
   //  背景描画（高速道路）
@@ -714,14 +709,14 @@ function draw() {
     if (currentDistance >= 7.0 && currentDistance < 14.0) hwBg = images.bgHighwayFukuyama;
     else if (currentDistance >= 14.0) hwBg = images.bgHighwayMiki;
 
-    safeDraw(hwBg, skyX, 0, canvas.width, 340);
-    safeDraw(hwBg, skyX + canvas.width, 0, canvas.width, 340);
+    safeDraw(hwBg, skyX, 0, canvas.width, 350);
+    safeDraw(hwBg, skyX + canvas.width, 0, canvas.width, 350);
 
   // ===============================
-  //  背景描画（下道）
+  //  背景描画（下道：イラストを空ごとそのまま描画）
   // ===============================
   } else {
-    if (currentStage === 1) { // 福岡（夜へのグラデーション）
+    if (currentStage === 1) { // 福岡
       safeDraw(images.bgNightSky, skyX, 0, canvas.width, canvas.height);
       safeDraw(images.bgNightSky, skyX + canvas.width, 0, canvas.width, canvas.height);
 
@@ -739,7 +734,7 @@ function draw() {
 
       if (!towerPassed && towerX > -200 && towerX < canvas.width) safeDraw(images.bgTower, towerX, 90, 120, 280);
 
-    } else if (currentStage === 2) { // 広島（昼空）
+    } else if (currentStage === 2) { // 広島
       safeDraw(images.bgSky, skyX, 0, canvas.width, canvas.height);
       safeDraw(images.bgSky, skyX + canvas.width, 0, canvas.width, canvas.height);
 
@@ -748,36 +743,36 @@ function draw() {
       safeDraw(images.bgHiroshima, townX, townY, canvas.width, townHeight);
       safeDraw(images.bgHiroshima, townX + canvas.width, townY, canvas.width, townHeight);
 
-    } else if (currentStage === 3) { // 大阪・名古屋（昼空）
-      safeDraw(images.bgSky, skyX, 0, canvas.width, canvas.height);
-      safeDraw(images.bgSky, skyX + canvas.width, 0, canvas.width, canvas.height);
-
-      if (bgMonsterX > -300 && bgMonsterX < canvas.width) safeDraw(images.monsterTakoyaki, bgMonsterX, 120, 190, 190);
-
+    } else if (currentStage === 3) { // 大阪・名古屋（空切り抜き不要！イラストをそのまま表示）
+      
+      // 1. 距離に応じて背景イラストをシンプルに切り替え
       let currentBg = images.bgDotonbori;
-      if (currentDistance >= 4.0 && currentDistance < 8.0) currentBg = images.bgTsutenkaku;
-      else if (currentDistance >= 8.0) currentBg = images.bgNagoyaCastle;
+      if (currentDistance >= 3.0 && currentDistance < 7.0) {
+        currentBg = images.bgTsutenkaku;
+      } else if (currentDistance >= 7.0) {
+        currentBg = images.bgNagoyaCastle;
+      }
 
+      // 2. 背景イラストをそのまま画面上部（Y:0）から描画
       safeDraw(currentBg, townX, townY, canvas.width, townHeight);
       safeDraw(currentBg, townX + canvas.width, townY, canvas.width, townHeight);
     }
   }
 
   // ===============================
-  //  🛣️ 道路レイヤー（画面内側 Y:340 に引き上げて幅90pxに調整）
+  //  🛣️ 道路レイヤー
   // ===============================
   ctx.save();
   ctx.fillStyle = '#222';
-  ctx.fillRect(0, 340, canvas.width, 110); // 道路本体
+  ctx.fillRect(0, 350, canvas.width, 100);
 
-  // 中央の白い点線（Y:385 付近）
   ctx.strokeStyle = '#FFF';
   ctx.lineWidth = 3;
   ctx.setLineDash([25, 25]);
   ctx.lineDashOffset = roadDashOffset;
   ctx.beginPath();
-  ctx.moveTo(0, 385);
-  ctx.lineTo(canvas.width, 385);
+  ctx.moveTo(0, 395);
+  ctx.lineTo(canvas.width, 395);
   ctx.stroke();
   ctx.restore();
 
@@ -787,9 +782,9 @@ function draw() {
     } else if (speedKmh < 100 && (Math.floor(Date.now() / 150) % 2 === 0)) {
       ctx.save();
       ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
-      ctx.fillRect(0, 340, 20, 110);
+      ctx.fillRect(0, 350, 20, 100);
       ctx.fillStyle = '#FFF'; ctx.font = 'bold 16px sans-serif';
-      ctx.fillText('🚨 接近中！', 25, 390);
+      ctx.fillText('🚨 接近中！', 25, 400);
       ctx.restore();
     }
   }
@@ -848,7 +843,7 @@ function draw() {
     ctx.fillText(isPaused ? '▶' : '⏸️', 775, 38);
     ctx.restore();
 
-    // 🎨 上下操作ボタン（判定・描画位置最適化）
+    // 🎨 上下操作ボタン
     ctx.save();
     // ▲ 上ボタン
     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
