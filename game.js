@@ -1,12 +1,11 @@
 // ===============================
-//  game.js  Part 1 (スマホタッチ判定・完全分離版)
+//  忠犬しばとのお迎え大作戦（横画面・PNG統一版）
+//  game.js  Part 1 (前半：最終ステージ・シュウマイ対応版)
 // ===============================
 
-// --- Canvas 初期化 ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- 画像素材のロード（PNG統一版） ---
 const images = {};
 const imageSources = {
   bgSky: 'bg_sky.png',
@@ -19,18 +18,24 @@ const imageSources = {
   monsterMentaiko: 'monster_mentaiko.png',
   monsterMomijigon: 'monster_momijigon.png',
   monsterTakoyaki: 'monster_takoyaki.png',
+  monsterShumai: 'monster_shumai.png', // 🥟 シュウマイマン
 
   bgHiroshima: 'bg_hiroshima.png',
   bgDotonbori: 'bg_dotonbori.png',
   bgTsutenkaku: 'bg_tsutenkaku.png',
   bgNagoyaCastle: 'bg_nagoya_castle.png',
 
-  bgHighwayMiyajima: 'bg_highway_miyajima.png',
-  bgHighwayFukuyama: 'bg_highway_fukuyama.png',
-  bgHighwayMiki: 'bg_highway_miki.png',
+  // 🏙️ 下道：横浜〜渋谷
+  bgMinatomirai: 'bg_minatomirai.png',
+  bgAkarenga: 'bg_akarenga.png',
+  bgShibuya: 'bg_shibuya.png',
+
+  // 🏎️ 高速：東名〜首都高
+  bgHighwayEbina: 'bg_highway_ebina.png',
+  bgHighwayBridge: 'bg_highway_bridge.png',
+  bgHighwayShutoko: 'bg_highway_shutoko.png',
 
   road: 'road.png',
-
   titleCard: 'title_card.png',
   openingStory: 'opening_story.png',
 
@@ -117,19 +122,9 @@ let roadDashOffset = 0;
 const LANES = { 0: 330, 1: 395 };
 
 const player = {
-  baseX: 100,
-  x: 100,
-  lane: 1,
-  y: LANES[1],
-  targetY: LANES[1],
-  width: 95,
-  height: 48,
-  vy: 0,
-  gravity: 0.38,
-  jumpPower: -18.0,
-  isGrounded: true,
-  state: 'DRIVE',
-  stateTimer: 0
+  baseX: 100, x: 100, lane: 1, y: LANES[1], targetY: LANES[1],
+  width: 95, height: 48, vy: 0, gravity: 0.38, jumpPower: -18.0,
+  isGrounded: true, state: 'DRIVE', stateTimer: 0
 };
 
 let objects = [];
@@ -140,8 +135,7 @@ let lastSpawnLane = -1;
 const SAVE_KEY = 'shibato_save_data';
 
 function saveGame() {
-  const saveData = { stage: currentStage, money: scoreMoney };
-  localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+  localStorage.setItem(SAVE_KEY, JSON.stringify({ stage: currentStage, money: scoreMoney }));
 }
 
 function loadGameData() {
@@ -154,151 +148,93 @@ function clearSaveData() {
   localStorage.removeItem(SAVE_KEY);
 }
 
-// ===============================
-//  init() — タッチ判定安定版
-// ===============================
 function init() {
   const container = document.getElementById('gameContainer');
-
   window.addEventListener('contextmenu', e => e.preventDefault());
 
   function processInputStart(canvasX, canvasY, buttonNum = 0) {
-    // ⏸️ ポーズボタン
-    if ((gameState === 'PLAYING' || gameState === 'PLAYING_HIGHWAY') &&
-        canvasX >= 720 && canvasX <= 820 &&
-        canvasY >= 0 && canvasY <= 80) {
+    if ((gameState === 'PLAYING' || gameState === 'PLAYING_HIGHWAY') && canvasX >= 720 && canvasX <= 820 && canvasY >= 0 && canvasY <= 80) {
       isPaused = !isPaused;
       return;
     }
-
     if (isPaused) return;
 
     if (gameState === 'TITLE') {
       const saveData = loadGameData();
       if (saveData) {
         if (canvasX < canvas.width / 2) {
-          clearSaveData();
-          scoreMoney = 0;
-          currentStage = 1;
-          gameState = 'STORY';
+          clearSaveData(); scoreMoney = 0; currentStage = 1; gameState = 'STORY';
         } else {
-          currentStage = saveData.stage;
-          scoreMoney = saveData.money;
-          gameState = 'SELECT_ROUTE';
+          currentStage = saveData.stage; scoreMoney = saveData.money; gameState = 'SELECT_ROUTE';
         }
       } else {
-        scoreMoney = 0;
-        currentStage = 1;
-        gameState = 'STORY';
+        scoreMoney = 0; currentStage = 1; gameState = 'STORY';
       }
       return;
     }
 
     if (gameState === 'STORY') {
-      resetStage(1);
-      gameState = 'PLAYING';
-      return;
+      resetStage(1); gameState = 'PLAYING'; return;
     }
 
     if (gameState === 'STAGE_CLEAR' && endCardTimer >= END_CARD_DELAY) {
-      saveGame();
-      gameState = 'SELECT_ROUTE';
-      return;
+      saveGame(); gameState = 'SELECT_ROUTE'; return;
     }
 
     if (gameState === 'SELECT_ROUTE') {
-      if (buttonNum === 2) {
-        selectShitadaRoute();
-      } else {
+      if (buttonNum === 2) selectShitadaRoute();
+      else {
         if (canvasX > canvas.width / 2) selectKosokuRoute();
         else selectShitadaRoute();
       }
       return;
     }
 
-    // 🕹️ 下道プレイ中の操作（上下ボタンの境界線を完全に分離）
     if (gameState === 'PLAYING') {
-      if (canvasX > 700 && canvasY > 240) {
-        handleAction();
-      } 
-      else if (canvasX <= 220 && canvasY >= 260 && canvasY <= 345) {
-        moveLane(-1); // ▲ 上（明確に上エリア）
-      } 
-      else if (canvasX <= 220 && canvasY >= 355 && canvasY <= 440) {
-        moveLane(1);  // ▼ 下（明確に下エリア）
-      }
+      if (canvasX > 700 && canvasY > 240) handleAction();
+      else if (canvasX <= 220 && canvasY >= 260 && canvasY <= 345) moveLane(-1);
+      else if (canvasX <= 220 && canvasY >= 355 && canvasY <= 440) moveLane(1);
       return;
     }
 
-    // 🏎️ 高速道路プレイ中の操作
     if (gameState === 'PLAYING_HIGHWAY') {
       if (showHighwayTutorial) {
-        if (canvasX >= 250 && canvasX <= 710 &&
-            canvasY >= 280 && canvasY <= 400) {
-          showHighwayTutorial = false;
-          pedalHighlightTimer = 180;
+        if (canvasX >= 250 && canvasX <= 710 && canvasY >= 280 && canvasY <= 400) {
+          showHighwayTutorial = false; pedalHighlightTimer = 180;
         }
         return;
       }
-
-      if (canvasX > 700 && canvasY > 240) {
-        isAccelerating = true;
-        pedalHighlightTimer = 0;
-      } 
-      else if (canvasX <= 220 && canvasY >= 260 && canvasY <= 345) {
-        moveLane(-1);
-      } 
-      else if (canvasX <= 220 && canvasY >= 355 && canvasY <= 440) {
-        moveLane(1);
-      }
+      if (canvasX > 700 && canvasY > 240) { isAccelerating = true; pedalHighlightTimer = 0; }
+      else if (canvasX <= 220 && canvasY >= 260 && canvasY <= 345) moveLane(-1);
+      else if (canvasX <= 220 && canvasY >= 355 && canvasY <= 440) moveLane(1);
       return;
     }
 
     if (gameState === 'GAMEOVER') {
-      if (currentStage === 99) {
-        resetHighway();
-        gameState = 'PLAYING_HIGHWAY';
-      } else {
-        resetStage(currentStage);
-        gameState = 'PLAYING';
-      }
+      if (currentStage === 99) { resetHighway(); gameState = 'PLAYING_HIGHWAY'; }
+      else { resetStage(currentStage); gameState = 'PLAYING'; }
       return;
     }
   }
 
-  function processInputEnd() {
-    isAccelerating = false;
-  }
+  function processInputEnd() { isAccelerating = false; }
 
-  // 📱 iPhone等のマルチタッチ対策（一番最初に触れた指 1本目だけを確実に処理する）
   container.addEventListener('touchstart', e => {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
     if (e.touches.length > 0) {
-      const t = e.touches[0]; // 最初のタッチのみ採用して誤作動を防ぐ
-      const x = (t.clientX - rect.left) * (canvas.width / rect.width);
-      const y = (t.clientY - rect.top) * (canvas.height / rect.height);
-      processInputStart(x, y);
+      const t = e.touches[0];
+      processInputStart((t.clientX - rect.left) * (canvas.width / rect.width), (t.clientY - rect.top) * (canvas.height / rect.height));
     }
   }, { passive: false });
 
-  container.addEventListener('touchend', e => {
-    e.preventDefault();
-    processInputEnd();
-  }, { passive: false });
-
+  container.addEventListener('touchend', e => { e.preventDefault(); processInputEnd(); }, { passive: false });
   container.addEventListener('mousedown', e => {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-    processInputStart(x, y, e.button);
+    processInputStart((e.clientX - rect.left) * (canvas.width / rect.width), (e.clientY - rect.top) * (canvas.height / rect.height), e.button);
   });
-
-  container.addEventListener('mouseup', e => {
-    e.preventDefault();
-    processInputEnd();
-  });
+  container.addEventListener('mouseup', e => { e.preventDefault(); processInputEnd(); });
 
   document.addEventListener('keydown', e => {
     if (e.code === 'KeyP') { isPaused = !isPaused; return; }
@@ -307,41 +243,27 @@ function init() {
       addPopup(isInvincible ? '🛡️ 無敵モード ON' : '⚔️ 通常モード ON', '#00FF7F', canvas.width / 2, 200);
       return;
     }
-
     if (e.code === 'Digit1') { resetStage(1); gameState = 'PLAYING'; }
     else if (e.code === 'Digit2') { resetStage(2); gameState = 'PLAYING'; }
     else if (e.code === 'Digit3') { resetStage(3); gameState = 'PLAYING'; }
+    else if (e.code === 'Digit4') { resetStage(4); gameState = 'PLAYING'; } // 4キーで横浜渋谷へ
     else if (e.code === 'Digit9') { resetHighway(); gameState = 'PLAYING_HIGHWAY'; }
     else if (e.code === 'Digit0') { gameState = 'SELECT_ROUTE'; }
 
     if (isPaused) return;
-
-    if (gameState === 'SELECT_ROUTE') {
-      if (e.code === 'KeyB') selectKosokuRoute();
-      return;
-    }
-
-    if (gameState === 'PLAYING_HIGHWAY' && showHighwayTutorial) {
-      if (e.code === 'Space' || e.code === 'Enter') {
-        showHighwayTutorial = false;
-        pedalHighlightTimer = 180;
-      }
-      return;
+    if (gameState === 'SELECT_ROUTE' && e.code === 'KeyB') selectKosokuRoute();
+    if (gameState === 'PLAYING_HIGHWAY' && showHighwayTutorial && (e.code === 'Space' || e.code === 'Enter')) {
+      showHighwayTutorial = false; pedalHighlightTimer = 180;
     }
 
     if (e.code === 'ArrowUp' || e.code === 'KeyW') moveLane(-1);
     else if (e.code === 'ArrowDown' || e.code === 'KeyS') moveLane(1);
-    else if (e.code === 'Space') {
-      if (gameState === 'PLAYING') handleAction();
-    } else if (e.code === 'KeyShift' || e.code === 'KeyD') {
-      isAccelerating = true;
-    }
+    else if (e.code === 'Space' && gameState === 'PLAYING') handleAction();
+    else if (e.code === 'KeyShift' || e.code === 'KeyD') isAccelerating = true;
   });
 
   document.addEventListener('keyup', e => {
-    if (e.code === 'KeyShift' || e.code === 'KeyD') {
-      isAccelerating = false;
-    }
+    if (e.code === 'KeyShift' || e.code === 'KeyD') isAccelerating = false;
   });
 
   gameLoop();
@@ -350,10 +272,7 @@ function init() {
 function moveLane(dir) {
   if ((gameState === 'PLAYING' || gameState === 'PLAYING_HIGHWAY') && !showHighwayTutorial) {
     const newLane = player.lane + dir;
-    if (newLane >= 0 && newLane <= 1) {
-      player.lane = newLane;
-      player.targetY = LANES[newLane];
-    }
+    if (newLane >= 0 && newLane <= 1) { player.lane = newLane; player.targetY = LANES[newLane]; }
   }
 }
 
@@ -361,7 +280,8 @@ function selectShitadaRoute() {
   let nextStage = 1;
   if (currentStage === 1) nextStage = 2;
   else if (currentStage === 2) nextStage = 3;
-  else if (currentStage === 3 || currentStage === 99) nextStage = 1;
+  else if (currentStage === 3) nextStage = 4; // 3(大阪)の次は4(横浜渋谷)
+  else if (currentStage === 4 || currentStage === 99) nextStage = 1;
   resetStage(nextStage);
   gameState = 'PLAYING';
 }
@@ -379,8 +299,7 @@ function selectKosokuRoute() {
 
 function handleAction() {
   if (gameState === 'PLAYING' && player.isGrounded) {
-    player.state = 'PREP';
-    player.stateTimer = 2;
+    player.state = 'PREP'; player.stateTimer = 2;
   }
 }
 
@@ -397,29 +316,14 @@ function resetStage(stageNum) {
   nightAlpha = 0;
   endCardTimer = 0;
   tutorialTimer = (stageNum === 1) ? TUTORIAL_DURATION : 0;
-  player.lane = 1;
-  player.x = 100;
-  player.y = LANES[1];
-  player.targetY = LANES[1];
+  player.lane = 1; player.x = 100; player.y = LANES[1]; player.targetY = LANES[1];
   isPaused = false;
 }
 
 function resetHighway() {
-  currentStage = 99;
-  currentDistance = 0;
-  speedKmh = 80;
-  gameSpeed = 6.0;
-  life = 3;
-  objects = [];
-  popups = [];
-  patrolCarX = -300;
-  showHighwayTutorial = true;
-  pedalHighlightTimer = 0;
-  player.lane = 1;
-  player.x = 100;
-  player.y = LANES[1];
-  player.targetY = LANES[1];
-  isPaused = false;
+  currentStage = 99; currentDistance = 0; speedKmh = 80; gameSpeed = 6.0; life = 3;
+  objects = []; popups = []; patrolCarX = -300; showHighwayTutorial = true; pedalHighlightTimer = 0;
+  player.lane = 1; player.x = 100; player.y = LANES[1]; player.targetY = LANES[1]; isPaused = false;
 }
 
 function addPopup(text, color, x, y) {
@@ -433,15 +337,9 @@ function gameLoop() {
 }
 
 function update() {
-  if (gameState === 'STAGE_CLEAR') {
-    endCardTimer++;
-    return;
-  }
-  if (gameState === 'PLAYING') {
-    updateStageLogic();
-  } else if (gameState === 'PLAYING_HIGHWAY') {
-    if (!showHighwayTutorial) updateHighway();
-  }
+  if (gameState === 'STAGE_CLEAR') { endCardTimer++; return; }
+  if (gameState === 'PLAYING') updateStageLogic();
+  else if (gameState === 'PLAYING_HIGHWAY' && !showHighwayTutorial) updateHighway();
 }
 
 function updateStageLogic() {
@@ -464,7 +362,7 @@ function updateStageLogic() {
   skyX = (skyX - gameSpeed * 0.15) % canvas.width;
   townX = (townX - gameSpeed * 0.5) % canvas.width;
 
-  if (currentStage === 1) { 
+  if (currentStage === 1) { // 福岡
     if (currentDistance >= 5.5) nightAlpha = Math.min(1, nightAlpha + 0.008);
     if (currentDistance >= 1.5 && !towerPassed) {
       if (towerX === -200) towerX = canvas.width;
@@ -477,14 +375,8 @@ function updateStageLogic() {
     } else if (currentDistance >= 7.0 && bgMonsterX > -300) {
       bgMonsterX -= gameSpeed * 0.8;
     }
-  } else if (currentStage === 2) { 
-    if (currentDistance >= 1.5 && currentDistance < 5.0) {
-      if (bgMonsterX === -300) bgMonsterX = canvas.width;
-      bgMonsterX -= gameSpeed * 0.35;
-    } else if (currentDistance >= 5.0 && bgMonsterX > -300) {
-      bgMonsterX -= gameSpeed * 0.8;
-    }
-  } else if (currentStage === 3) { 
+  } else if (currentStage === 2 || currentStage === 3 || currentStage === 4) { 
+    // 広島・大阪・横浜渋谷
     if (currentDistance >= 1.5 && currentDistance < 5.5) {
       if (bgMonsterX === -300) bgMonsterX = canvas.width;
       bgMonsterX -= gameSpeed * 0.35;
@@ -498,34 +390,22 @@ function updateStageLogic() {
 
 function updateHighway() {
   if (pedalHighlightTimer > 0) pedalHighlightTimer--;
-
-  if (isAccelerating) {
-    speedKmh = Math.min(160, speedKmh + 0.9);
-  } else {
-    speedKmh = Math.max(70, speedKmh - 0.5);
-  }
+  if (isAccelerating) speedKmh = Math.min(160, speedKmh + 0.9);
+  else speedKmh = Math.max(70, speedKmh - 0.5);
 
   gameSpeed = speedKmh * 0.09;
-  const targetX = 100 + ((speedKmh - 70) / 90) * 160;
-  player.x += (targetX - player.x) * 0.1;
-
+  player.x += (100 + ((speedKmh - 70) / 90) * 160 - player.x) * 0.1;
   currentDistance += speedKmh * 0.00015;
   roadDashOffset = (roadDashOffset - gameSpeed * 2) % 60;
 
   if (currentDistance >= HIGHWAY_STAGE_DISTANCE) {
-    currentDistance = HIGHWAY_STAGE_DISTANCE;
-    gameState = 'STAGE_CLEAR';
-    endCardTimer = 0;
-    return;
+    currentDistance = HIGHWAY_STAGE_DISTANCE; gameState = 'STAGE_CLEAR'; endCardTimer = 0; return;
   }
 
   skyX = (skyX - gameSpeed * 0.3) % canvas.width;
 
-  if (speedKmh < 100) {
-    patrolCarX = Math.min(60, patrolCarX + 1.5);
-  } else {
-    patrolCarX -= 2.0;
-  }
+  if (speedKmh < 100) patrolCarX = Math.min(60, patrolCarX + 1.5);
+  else patrolCarX -= 2.0;
 
   if (patrolCarX > 20 && Math.abs(player.x - patrolCarX) < 80) {
     scoreMoney = Math.max(0, scoreMoney - 3000);
@@ -541,34 +421,21 @@ function updatePlayerAndObjects() {
 
   if (player.state === 'PREP') {
     player.stateTimer--;
-    if (player.stateTimer <= 0) {
-      player.vy = player.jumpPower;
-      player.isGrounded = false;
-      player.state = 'JUMP';
-    }
+    if (player.stateTimer <= 0) { player.vy = player.jumpPower; player.isGrounded = false; player.state = 'JUMP'; }
   }
 
   if (!player.isGrounded) {
-    player.vy += player.gravity;
-    player.y += player.vy;
+    player.vy += player.gravity; player.y += player.vy;
     if (player.y >= player.targetY) {
-      player.y = player.targetY;
-      player.vy = 0;
-      player.isGrounded = true;
-      player.state = 'LAND';
-      player.stateTimer = 3;
+      player.y = player.targetY; player.vy = 0; player.isGrounded = true; player.state = 'LAND'; player.stateTimer = 3;
     }
   } else if (player.state === 'LAND') {
-    player.stateTimer--;
-    if (player.stateTimer <= 0) player.state = 'DRIVE';
+    player.stateTimer--; if (player.stateTimer <= 0) player.state = 'DRIVE';
   }
 
   for (let i = popups.length - 1; i >= 0; i--) {
-    const p = popups[i];
-    p.y -= 0.6;
-    if (p.life < 30) p.alpha -= 0.033;
-    p.life--;
-    if (p.life <= 0) popups.splice(i, 1);
+    const p = popups[i]; p.y -= 0.6; if (p.life < 30) p.alpha -= 0.033;
+    p.life--; if (p.life <= 0) popups.splice(i, 1);
   }
 
   spawnTimer++;
@@ -576,24 +443,17 @@ function updatePlayerAndObjects() {
 
   if (spawnTimer > spawnThreshold) {
     spawnTimer = 0;
-
     if (gameState === 'PLAYING_HIGHWAY') {
       const rand = Math.random() * 100;
       let spawnLane = (lastSpawnLane === 0) ? 1 : 0;
       if (Math.random() < 0.3) spawnLane = lastSpawnLane;
       lastSpawnLane = spawnLane;
 
-      if (rand < 10) {
-        objects.push({ type: 'patrol_obstacle', lane: spawnLane, x: canvas.width, y: LANES[spawnLane] - 10, width: 120, height: 55, overtaken: false, speedKmh: 90 });
-      } else if (rand < 20) {
-        objects.push({ type: 'orbis', x: canvas.width, y: 170, width: 120, height: 200, passed: false });
-      } else if (rand < 44) {
-        objects.push({ type: 'car_truck', lane: spawnLane, x: canvas.width, y: LANES[spawnLane] - 10, width: 140, height: 60, overtaken: false, speedKmh: 75 });
-      } else if (rand < 68) {
-        objects.push({ type: 'car_minivan', lane: spawnLane, x: canvas.width, y: LANES[spawnLane] - 10, width: 110, height: 50, overtaken: false, speedKmh: 85 });
-      } else {
-        objects.push({ type: 'car_sedan', lane: spawnLane, x: canvas.width, y: LANES[spawnLane] - 10, width: 100, height: 45, overtaken: false, speedKmh: 105 });
-      }
+      if (rand < 10) objects.push({ type: 'patrol_obstacle', lane: spawnLane, x: canvas.width, y: LANES[spawnLane] - 10, width: 120, height: 55, overtaken: false, speedKmh: 90 });
+      else if (rand < 20) objects.push({ type: 'orbis', x: canvas.width, y: 170, width: 120, height: 200, passed: false });
+      else if (rand < 44) objects.push({ type: 'car_truck', lane: spawnLane, x: canvas.width, y: LANES[spawnLane] - 10, width: 140, height: 60, overtaken: false, speedKmh: 75 });
+      else if (rand < 68) objects.push({ type: 'car_minivan', lane: spawnLane, x: canvas.width, y: LANES[spawnLane] - 10, width: 110, height: 50, overtaken: false, speedKmh: 85 });
+      else objects.push({ type: 'car_sedan', lane: spawnLane, x: canvas.width, y: LANES[spawnLane] - 10, width: 100, height: 45, overtaken: false, speedKmh: 105 });
     } else {
       const spawnLane = Math.floor(Math.random() * 2);
       const rand = Math.random();
@@ -607,7 +467,6 @@ function updatePlayerAndObjects() {
       else selectedType = 'monster_block';
 
       const objData = { type: selectedType, lane: spawnLane, x: canvas.width, y: LANES[spawnLane], width: 40, height: 55 };
-
       if (selectedType === 'truck') { objData.y = LANES[spawnLane] - 10; objData.width = 120; objData.height = 60; }
       else if (selectedType === 'car_sedan') { objData.y = LANES[spawnLane] - 5; objData.width = 95; objData.height = 45; }
       else if (selectedType === 'obstacle_tnt') { objData.y = LANES[spawnLane] + 10; objData.width = 50; objData.height = 50; }
@@ -620,46 +479,30 @@ function updatePlayerAndObjects() {
   for (let i = objects.length - 1; i >= 0; i--) {
     const obj = objects[i];
     let moveSpeed = gameSpeed;
-    if (obj.speedKmh) {
-      const relativeSpeed = speedKmh - obj.speedKmh;
-      moveSpeed = relativeSpeed * 0.12;
-    }
+    if (obj.speedKmh) moveSpeed = (speedKmh - obj.speedKmh) * 0.12;
     obj.x -= moveSpeed;
 
     if (gameState === 'PLAYING_HIGHWAY' && !obj.overtaken && obj.x + obj.width < player.x) {
-      obj.overtaken = true;
-      scoreMoney += 500;
+      obj.overtaken = true; scoreMoney += 500;
       addPopup('追い抜き！ +¥500', '#00FF7F', player.x + 20, player.y - 30);
     }
 
     if (obj.type === 'orbis') {
-      const distToOrbis = obj.x - player.x;
-      if (distToOrbis > 0 && distToOrbis < 300) orbisWarningTimer = 10;
+      if (obj.x - player.x > 0 && obj.x - player.x < 300) orbisWarningTimer = 10;
       if (!obj.passed && obj.x < player.x) {
         obj.passed = true;
         if (speedKmh >= 100) {
           scoreMoney = Math.max(0, scoreMoney - 2000);
           addPopup('📸 速度違反！ -¥2,000', '#FF0000', player.x, player.y - 40);
-        } else {
-          addPopup('安全運転クリア！', '#00FF7F', player.x, player.y - 40);
-        }
+        } else addPopup('安全運転クリア！', '#00FF7F', player.x, player.y - 40);
       }
     }
 
-    const isSameLane = (player.lane === obj.lane);
-    if (isSameLane && player.x < obj.x + obj.width && player.x + player.width > obj.x && (player.isGrounded || obj.type === 'orbis')) {
-      if (obj.type === 'hitchhiker') {
-        scoreMoney += 500;
-        addPopup('乗車完了！ +¥500', '#FFD700', player.x + 10, player.y - 20);
-      } else if (obj.type === 'mechanic') {
-        scoreMoney += 2000;
-        if (life < 3) life++;
-        addPopup('車両点検完了！ +¥2,000', '#00FF7F', player.x + 10, player.y - 20);
-      } else if (obj.type === 'obstacle_tnt') {
-        life = 0;
-        addPopup('💥 ＤＯＷN！！', '#FF0000', player.x + 20, player.y - 30);
-        gameState = 'GAMEOVER';
-      } else if (obj.type !== 'orbis') {
+    if (player.lane === obj.lane && player.x < obj.x + obj.width && player.x + player.width > obj.x && (player.isGrounded || obj.type === 'orbis')) {
+      if (obj.type === 'hitchhiker') { scoreMoney += 500; addPopup('乗車完了！ +¥500', '#FFD700', player.x + 10, player.y - 20); }
+      else if (obj.type === 'mechanic') { scoreMoney += 2000; if (life < 3) life++; addPopup('車両点検完了！ +¥2,000', '#00FF7F', player.x + 10, player.y - 20); }
+      else if (obj.type === 'obstacle_tnt') { life = 0; addPopup('💥 ＤＯＷＮ！！', '#FF0000', player.x + 20, player.y - 30); gameState = 'GAMEOVER'; }
+      else if (obj.type !== 'orbis') {
         if (!isInvincible) life--;
         addPopup('クラッシュ！', '#FF4444', player.x + 20, player.y - 20);
         if (life <= 0) gameState = 'GAMEOVER';
@@ -667,26 +510,21 @@ function updatePlayerAndObjects() {
       if (obj.type !== 'orbis') objects.splice(i, 1);
       continue;
     }
-
     if (obj.x + obj.width < -150 || obj.x > canvas.width + 300) objects.splice(i, 1);
   }
   if (orbisWarningTimer > 0) orbisWarningTimer--;
 }
 // ===============================
 //  忠犬しばとのお迎え大作戦（横画面・PNG統一版）
-//  game.js  Part 2 (後半：高速チュートリアル復元版)
+//  game.js  Part 2 (後半：新背景＆シュウマイ描画版)
 // ===============================
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // --- 安全描画関数 ---
   function safeDraw(img, x, y, w, h, alpha = 1) {
     if (img && img.complete && img.naturalWidth !== 0) {
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(img, x, y, w, h);
-      ctx.restore();
+      ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(img, x, y, w, h); ctx.restore();
     }
   }
 
@@ -694,21 +532,21 @@ function draw() {
   const townY = 0;
 
   // ===============================
-  //  背景描画（高速道路）
+  //  背景描画（高速道路：海老名 ➔ ベイブリッジ ➔ 首都高）
   // ===============================
   if (gameState === 'PLAYING_HIGHWAY') {
     safeDraw(images.bgSky, skyX, 0, canvas.width, canvas.height);
     safeDraw(images.bgSky, skyX + canvas.width, 0, canvas.width, canvas.height);
 
-    let hwBg = images.bgHighwayMiyajima;
-    if (currentDistance >= 7.0 && currentDistance < 14.0) hwBg = images.bgHighwayFukuyama;
-    else if (currentDistance >= 14.0) hwBg = images.bgHighwayMiki;
+    let hwBg = images.bgHighwayEbina;
+    if (currentDistance >= 6.5 && currentDistance < 13.5) hwBg = images.bgHighwayBridge;
+    else if (currentDistance >= 13.5) hwBg = images.bgHighwayShutoko;
 
     safeDraw(hwBg, skyX, 0, canvas.width, 350);
     safeDraw(hwBg, skyX + canvas.width, 0, canvas.width, 350);
 
   // ===============================
-  //  背景描画（下道）
+  //  背景描画（下道：福岡・広島・大阪名古屋・横浜渋谷）
   // ===============================
   } else {
     if (currentStage === 1) { // 福岡
@@ -725,6 +563,7 @@ function draw() {
       safeDraw(currentBg, townX, townY, canvas.width, townHeight);
       safeDraw(currentBg, townX + canvas.width, townY, canvas.width, townHeight);
 
+      // 🗼 福岡タワーは Stage 1 だけ表示！
       if (!towerPassed && towerX > -200 && towerX < canvas.width) {
         safeDraw(images.bgTower, towerX, 90, 120, 280);
       }
@@ -745,17 +584,27 @@ function draw() {
 
     } else if (currentStage === 3) { // 大阪・名古屋
       let currentBg = images.bgDotonbori;
-      if (currentDistance >= 3.0 && currentDistance < 7.0) {
-        currentBg = images.bgTsutenkaku;
-      } else if (currentDistance >= 7.0) {
-        currentBg = images.bgNagoyaCastle;
-      }
+      if (currentDistance >= 3.0 && currentDistance < 7.0) currentBg = images.bgTsutenkaku;
+      else if (currentDistance >= 7.0) currentBg = images.bgNagoyaCastle;
 
       safeDraw(currentBg, townX, townY, canvas.width, townHeight);
       safeDraw(currentBg, townX + canvas.width, townY, canvas.width, townHeight);
 
       if (bgMonsterX > -300 && bgMonsterX < canvas.width) {
         safeDraw(images.monsterTakoyaki, bgMonsterX, 100, 190, 190);
+      }
+
+    } else if (currentStage === 4) { // 🏙️ 横浜・渋谷（みなとみらい ➔ 赤レンガ ➔ 渋谷）
+      let currentBg = images.bgMinatomirai;
+      if (currentDistance >= 3.5 && currentDistance < 7.5) currentBg = images.bgAkarenga;
+      else if (currentDistance >= 7.5) currentBg = images.bgShibuya;
+
+      safeDraw(currentBg, townX, townY, canvas.width, townHeight);
+      safeDraw(currentBg, townX + canvas.width, townY, canvas.width, townHeight);
+
+      // 🥟 シュウマイマン登場！
+      if (bgMonsterX > -300 && bgMonsterX < canvas.width) {
+        safeDraw(images.monsterShumai, bgMonsterX, 100, 180, 190);
       }
     }
   }
@@ -767,14 +616,10 @@ function draw() {
   ctx.fillStyle = '#222';
   ctx.fillRect(0, 350, canvas.width, 100);
 
-  ctx.strokeStyle = '#FFF';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#FFF'; ctx.lineWidth = 3;
   ctx.setLineDash([25, 25]);
   ctx.lineDashOffset = roadDashOffset;
-  ctx.beginPath();
-  ctx.moveTo(0, 395);
-  ctx.lineTo(canvas.width, 395);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, 395); ctx.lineTo(canvas.width, 395); ctx.stroke();
   ctx.restore();
 
   if (gameState === 'PLAYING_HIGHWAY') {
@@ -782,10 +627,8 @@ function draw() {
       safeDraw(images.patrolCar, patrolCarX, LANES[player.lane] - 10, 130, 55);
     } else if (speedKmh < 100 && (Math.floor(Date.now() / 150) % 2 === 0)) {
       ctx.save();
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
-      ctx.fillRect(0, 350, 20, 100);
-      ctx.fillStyle = '#FFF'; ctx.font = 'bold 16px sans-serif';
-      ctx.fillText('🚨 接近中！', 25, 400);
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.7)'; ctx.fillRect(0, 350, 20, 100);
+      ctx.fillStyle = '#FFF'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('🚨 接近中！', 25, 400);
       ctx.restore();
     }
   }
@@ -812,6 +655,7 @@ function draw() {
         img = images.monsterMentaiko;
         if (currentStage === 2) img = images.monsterMomijigon;
         else if (currentStage === 3) img = images.monsterTakoyaki;
+        else if (currentStage === 4) img = images.monsterShumai; // 🥟 障害物シュウマイ
       } else if (item.type === 'orbis') img = images.obstacleOrbis;
       else if (item.type === 'patrol_obstacle') img = images.patrolCar;
       else if (item.type === 'car_sedan') img = images.carSedan;
@@ -830,9 +674,7 @@ function draw() {
     ctx.fillStyle = '#FFD700'; ctx.font = 'bold 24px sans-serif';
     ctx.fillText(`¥${scoreMoney}`, 65, 47);
 
-    for (let i = 0; i < life; i++) {
-      safeDraw(images.heart, 820 + (i * 35), 20, 30, 30);
-    }
+    for (let i = 0; i < life; i++) safeDraw(images.heart, 820 + (i * 35), 20, 30, 30);
 
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.strokeStyle = '#FFF'; ctx.lineWidth = 2;
@@ -842,8 +684,7 @@ function draw() {
     ctx.restore();
 
     ctx.save();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.strokeStyle = '#FFF'; ctx.lineWidth = 2.5;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; ctx.strokeStyle = '#FFF'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.roundRect(15, 275, 120, 60, 12); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#FFF'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('▲ 上', 75, 312);
@@ -857,8 +698,7 @@ function draw() {
 
   if (gameState === 'PLAYING') {
     ctx.save();
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.85)';
-    ctx.strokeStyle = '#FFF'; ctx.lineWidth = 3;
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.85)'; ctx.strokeStyle = '#FFF'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.roundRect(815, 310, 115, 110, 18); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#000'; ctx.font = 'bold 20px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('🦘 JUMP', 872, 373);
@@ -891,9 +731,6 @@ function draw() {
     }
   }
 
-  // 🏎️ ===============================
-  //  高速チュートリアル画面（完全復元！）
-  // ===============================
   if (gameState === 'PLAYING_HIGHWAY' && showHighwayTutorial) {
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -921,7 +758,6 @@ function draw() {
     ctx.restore();
   }
 
-  // --- ポーズ画面 ---
   if (isPaused) {
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -929,12 +765,10 @@ function draw() {
     ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
     ctx.strokeText('⏸️ 一時停止中 (PAUSE)', canvas.width / 2, 210); ctx.fillText('⏸️ 一時停止中 (PAUSE)', canvas.width / 2, 210);
     ctx.fillStyle = '#FFF'; ctx.font = '20px sans-serif';
-    ctx.strokeText('スクショ撮影チャンス！ ( [P]キー か ⏸️タップで再開 )', canvas.width / 2, 260);
-    ctx.fillText('スクショ撮影チャンス！ ( [P]キー か ⏸️タップで再開 )', canvas.width / 2, 260);
+    ctx.strokeText('スクショ撮影チャンス！ ( [P]キー か ⏸️タップで再開 )', canvas.width / 2, 260); ctx.fillText('スクショ撮影チャンス！ ( [P]キー か ⏸️タップで再開 )', canvas.width / 2, 260);
     ctx.restore();
   }
 
-  // --- ポップアップ描画 ---
   popups.forEach(p => {
     ctx.save();
     ctx.globalAlpha = Math.max(0, p.alpha);
@@ -944,34 +778,9 @@ function draw() {
     ctx.restore();
   });
 
-  // --- タイトル画面 ---
-  if (gameState === 'TITLE') {
-    safeDraw(images.titleCard, 0, 0, canvas.width, canvas.height);
-    const saveData = loadGameData();
-    if (saveData) {
-      ctx.save();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.strokeStyle = '#FFF'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.roundRect(140, 340, 300, 70, 15); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#FFF'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('🎮 はじめから', 290, 383);
+  if (gameState === 'TITLE') safeDraw(images.titleCard, 0, 0, canvas.width, canvas.height);
+  if (gameState === 'STORY') safeDraw(images.openingStory, 0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = 'rgba(0, 200, 80, 0.85)'; ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.roundRect(520, 340, 300, 70, 15); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#FFF'; ctx.font = 'bold 24px sans-serif';
-      ctx.fillText('🚩 つづきから', 670, 383);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#FFF'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.strokeStyle = '#000'; ctx.lineWidth = 5;
-      ctx.strokeText('画面タップでスタート！', canvas.width / 2, 400); ctx.fillText('画面タップでスタート！', canvas.width / 2, 400);
-    }
-  }
-
-  // --- ストーリー画面 ---
-  if (gameState === 'STORY') {
-    safeDraw(images.openingStory, 0, 0, canvas.width, canvas.height);
-  }
-
-  // --- ステージクリア画面 ---
   if (gameState === 'STAGE_CLEAR') {
     let clearImg = images.endCardFukuoka;
     if (currentStage === 3) clearImg = images.endCardOsaka;
@@ -988,7 +797,8 @@ function draw() {
     let stageTitle = '🎉 福岡ステージ クリア！';
     if (currentStage === 2) stageTitle = '🎉 広島ステージ クリア！';
     else if (currentStage === 3) stageTitle = '🎉 大阪・名古屋ステージ クリア！';
-    else if (currentStage === 99) stageTitle = '🎉 山陽自動車道 ステージクリア！';
+    else if (currentStage === 4) stageTitle = '🎉 横浜・渋谷ステージ クリア！';
+    else if (currentStage === 99) stageTitle = '🎉 高速道路 ステージクリア！';
 
     ctx.fillStyle = '#FFD700'; ctx.font = 'bold 30px sans-serif';
     ctx.strokeText(stageTitle, canvas.width / 2, 310); ctx.fillText(stageTitle, canvas.width / 2, 310);
@@ -998,44 +808,33 @@ function draw() {
     ctx.restore();
   }
 
-  // --- ルート選択画面 ---
   if (gameState === 'SELECT_ROUTE') {
     safeDraw(images.selectRoute, 0, 0, canvas.width, canvas.height);
 
-    ctx.save();
-    ctx.textAlign = 'center';
-
+    ctx.save(); ctx.textAlign = 'center';
     ctx.fillStyle = '#FFD700'; ctx.font = 'bold 26px sans-serif'; ctx.strokeStyle = '#000'; ctx.lineWidth = 6;
-    ctx.strokeText(`現在の所持金: ¥${scoreMoney}`, canvas.width / 2, 40);
-    ctx.fillText(`現在の所持金: ¥${scoreMoney}`, canvas.width / 2, 40);
+    ctx.strokeText(`現在の所持金: ¥${scoreMoney}`, canvas.width / 2, 40); ctx.fillText(`現在の所持金: ¥${scoreMoney}`, canvas.width / 2, 40);
 
     ctx.fillStyle = '#FFF'; ctx.font = 'bold 22px sans-serif';
     ctx.globalAlpha = (Math.sin(Date.now() / 180) + 1) / 2;
-    ctx.strokeText('👉 選択ルートをタップ！ 👈', canvas.width / 2, 78);
-    ctx.fillText('👉 選択ルートをタップ！ 👈', canvas.width / 2, 78);
+    ctx.strokeText('👉 選択ルートをタップ！ 👈', canvas.width / 2, 78); ctx.fillText('👉 選択ルートをタップ！ 👈', canvas.width / 2, 78);
     ctx.globalAlpha = 1.0;
 
     ctx.fillStyle = '#FFF'; ctx.font = 'bold 36px sans-serif'; ctx.strokeStyle = '#000'; ctx.lineWidth = 8;
-    ctx.strokeText('◀ 下道 (無料)', 220, 360);
-    ctx.fillText('◀ 下道 (無料)', 220, 360);
+    ctx.strokeText('◀ 下道 (無料)', 220, 360); ctx.fillText('◀ 下道 (無料)', 220, 360);
 
     ctx.font = 'bold 20px sans-serif'; ctx.fillStyle = '#FFD700'; ctx.lineWidth = 5;
-    ctx.strokeText('PC: 左クリック', 220, 405);
-    ctx.fillText('PC: 左クリック', 220, 405);
+    ctx.strokeText('PC: 左クリック', 220, 405); ctx.fillText('PC: 左クリック', 220, 405);
 
     let hwColor = scoreMoney >= 7000 ? '#00FF7F' : '#FF4444';
     ctx.fillStyle = hwColor; ctx.font = 'bold 34px sans-serif'; ctx.strokeStyle = '#000'; ctx.lineWidth = 8;
-    ctx.strokeText('高速道路 (¥7,000) ▶', 720, 360);
-    ctx.fillText('高速道路 (¥7,000) ▶', 720, 360);
+    ctx.strokeText('高速道路 (¥7,000) ▶', 720, 360); ctx.fillText('高速道路 (¥7,000) ▶', 720, 360);
 
     ctx.font = 'bold 20px sans-serif'; ctx.fillStyle = '#FFD700'; ctx.lineWidth = 5;
-    ctx.strokeText('PC: [ B ] キー', 720, 405);
-    ctx.fillText('PC: [ B ] キー', 720, 405);
-
+    ctx.strokeText('PC: [ B ] キー', 720, 405); ctx.fillText('PC: [ B ] キー', 720, 405);
     ctx.restore();
   }
 
-  // --- ゲームオーバー画面 ---
   if (gameState === 'GAMEOVER') {
     ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#FF4444'; ctx.font = 'bold 40px sans-serif'; ctx.textAlign = 'center';
